@@ -4,7 +4,7 @@ mod midi_message;
 mod note;
 
 pub use byte::{U14, U7};
-pub use error::Error;
+pub use error::{Error, ToSliceError};
 pub use midi_message::{
     Channel, ControlNumber, ControlValue, MidiMessage, PitchBend, ProgramNumber, Song,
     SongPosition, Velocity,

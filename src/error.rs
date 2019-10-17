@@ -43,3 +43,8 @@ impl fmt::Display for Error {
         fmt::Debug::fmt(self, f)
     }
 }
+
+pub enum ToSliceError {
+    /// The destination buffer cannot fit all the bytes.
+    BufferTooSmall,
+}
