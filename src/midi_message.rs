@@ -303,7 +303,7 @@ impl<'a> MidiMessage<'a> {
 
     /// The number of bytes the MIDI message takes when encoded with the `std::io::Read` trait.
     #[deprecated(
-        since = "3.0.2",
+        since = "3.1.0",
         note = "Function has been renamed to MidiMessage::bytes_size()."
     )]
     pub fn wire_size(&self) -> usize {
@@ -342,6 +342,7 @@ impl<'a> MidiMessage<'a> {
     }
 }
 
+#[deprecated(since = "3.1.0", note = "Use MidiMessage::copy_from_slice instead.")]
 impl<'a> io::Read for MidiMessage<'a> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         match self.copy_to_slice(buf) {
