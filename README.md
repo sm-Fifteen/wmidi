@@ -8,12 +8,6 @@ Midi encoding and decoding library suitable for real-time execution.
 
 # Changelog
 
-## Planned 4.0
-
-* Merge `MidiMessage::SysEx` and `MidiMessage::OwnedSysEx` into a single `Cow<u8>` backed variant.
-* Remove `std::io::Read` trait from `MidiMessage`. Use `MidiMessage::copy_to_slice()` instead.
-* Remove deprecated methods.
-
 ## 3.1-unreleased
 
 * Rename `MidiMessage::wire_size()` to `MidiMessage::bytes_size()`.

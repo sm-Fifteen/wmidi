@@ -474,7 +474,6 @@ fn valid_data_byte(b: u8) -> Result<U7, Error> {
 mod test {
     use super::*;
     use crate::{Error, Note};
-    use std::io::Read;
 
     #[test]
     fn try_from() {
@@ -555,7 +554,7 @@ mod test {
                 Note::A5,
                 U7::try_from(43).unwrap(),
             )
-            .read(&mut b)
+            .copy_to_slice(&mut b)
             .unwrap();
             assert_eq!(bytes_read, 3);
             b
@@ -568,7 +567,7 @@ mod test {
         let b = {
             let mut b = [0u8; 8];
             let bytes_read = MidiMessage::SysEx(U7::try_from_bytes(&[10, 20, 30, 40, 50]).unwrap())
-                .read(&mut b)
+                .copy_to_slice(&mut b)
                 .unwrap();
             assert_eq!(bytes_read, 7);
             b
