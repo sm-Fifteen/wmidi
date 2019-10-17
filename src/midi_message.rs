@@ -546,30 +546,31 @@ mod test {
     }
 
     #[test]
-    fn read() {
+    fn copy_to_slice() {
         let b = {
             let mut b = [0u8; 6];
-            let bytes_read = MidiMessage::PolyphonicKeyPressure(
+            let bytes_copied = MidiMessage::PolyphonicKeyPressure(
                 Channel::Ch10,
                 Note::A5,
                 U7::try_from(43).unwrap(),
             )
             .copy_to_slice(&mut b)
             .unwrap();
-            assert_eq!(bytes_read, 3);
+            assert_eq!(bytes_copied, 3);
             b
         };
         assert_eq!(b, [0xA9, 93, 43, 0, 0, 0]);
     }
 
     #[test]
-    fn read_sysex() {
+    fn copy_to_slice_sysex() {
         let b = {
             let mut b = [0u8; 8];
-            let bytes_read = MidiMessage::SysEx(U7::try_from_bytes(&[10, 20, 30, 40, 50]).unwrap())
-                .copy_to_slice(&mut b)
-                .unwrap();
-            assert_eq!(bytes_read, 7);
+            let bytes_copied =
+                MidiMessage::SysEx(U7::try_from_bytes(&[10, 20, 30, 40, 50]).unwrap())
+                    .copy_to_slice(&mut b)
+                    .unwrap();
+            assert_eq!(bytes_copied, 7);
             b
         };
         assert_eq!(b, [0xF0, 10, 20, 30, 40, 50, 0xF7, 0]);
