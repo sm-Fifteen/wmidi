@@ -17,6 +17,7 @@ fn handle_midi_message(bytes: &[u8]) -> Result<(), wmidi::FromBytesError> {
     if let wmidi::MidiMessage::NoteOn(_, note, _) = message {
         println!("Singing {}", note);
     }
+    Ok(())
 }
 
 // Encoding messages to bytes.
