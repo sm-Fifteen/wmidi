@@ -1,12 +1,9 @@
 use crate::{Error, Note, ToSliceError, U14, U7};
 use core::convert::TryFrom;
 
-#[cfg(feature = "std")]
-use std::{io, vec::Vec};
-
 /// Holds information based on the Midi 1.0 spec.
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub enum MidiMessage<'a> {
+pub enum MidiMessage<D> {
     /// This message is sent when a note is released (ended).
     NoteOff(Channel, Note, Velocity),
 
@@ -40,17 +37,7 @@ pub enum MidiMessage<'a> {
     /// 3 bytes. Two of the 1 Byte IDs are reserved for extensions called Universal Exclusive Messages, which are not
     /// manufacturer-specific. If a device recognizes the ID code as its own (or as a supported Universal message) it
     /// will listen to the rest of the message. Otherwise the message will be ignored.
-    SysEx(&'a [U7]),
-
-    /// This message type allows manufacturers to create their own messages (such as bulk dumps, patch parameters, and
-    /// other non-spec data) and provides a mechanism for creating additional MIDI Specification messages.
-    ///
-    /// In the data held by the SysEx message, the Manufacturer's ID code (assigned by MMA or AMEI) is either 1 byte or
-    /// 3 bytes. Two of the 1 Byte IDs are reserved for extensions called Universal Exclusive Messages, which are not
-    /// manufacturer-specific. If a device recognizes the ID code as its own (or as a supported Universal message) it
-    /// will listen to the rest of the message. Otherwise the message will be ignored.
-    #[cfg(feature = "std")]
-    OwnedSysEx(Vec<U7>),
+    SysEx(D),
 
     /// MIDI Time Code Quarter Frame.
     ///
@@ -95,7 +82,7 @@ pub enum MidiMessage<'a> {
     Reset,
 }
 
-impl<'a> TryFrom<&'a [u8]> for MidiMessage<'a> {
+impl<'a> TryFrom<&'a [u8]> for MidiMessage<&'a [U7]> {
     type Error = Error;
     /// Construct a midi message from bytes.
     fn try_from(bytes: &'a [u8]) -> Result<Self, Self::Error> {
@@ -127,7 +114,7 @@ impl<'a> TryFrom<&'a [u8]> for MidiMessage<'a> {
                 combine_data(data_a?, data_b?),
             )),
             0xF0 => match bytes[0] {
-                0xF0 => MidiMessage::new_sysex(bytes),
+                0xF0 => new_sysex(bytes),
                 0xF1 => Ok(MidiMessage::MidiTimeCode(data_a?)),
                 0xF2 => Ok(MidiMessage::SongPositionPointer(combine_data(
                     data_a?, data_b?,
@@ -151,13 +138,78 @@ impl<'a> TryFrom<&'a [u8]> for MidiMessage<'a> {
     }
 }
 
-impl<'a> MidiMessage<'a> {
-    /// Construct a midi message from bytes. Use `MidiMessage::try_from(bytes)` instead.
-    #[deprecated(since = "2.0.0", note = "Use MidiMessage::try_from instead.")]
-    pub fn from_bytes(bytes: &'a [u8]) -> Result<Self, Error> {
-        MidiMessage::try_from(bytes)
+#[inline(always)]
+fn new_sysex<'a>(bytes: &'a [u8]) -> Result<MidiMessage<&'a [U7]>, Error> {
+    debug_assert!(bytes[0] == 0xF0);
+    let end_i = 1 + bytes[1..]
+        .iter()
+        .copied()
+        .position(is_status_byte)
+        .ok_or(Error::NoSysExEndByte)?;
+    if bytes[end_i] != 0xF7 {
+        return Err(Error::UnexpectedNonSysExEndByte(bytes[end_i]));
+    }
+    // We've already gone through the bytes to find the first non data byte so we are assured
+    // that values from 1..end_i are valid data bytes.
+    let data_bytes = unsafe { U7::from_bytes_unchecked(&bytes[1..end_i]) };
+    Ok(MidiMessage::SysEx(data_bytes))
+}
+
+impl<D> MidiMessage<D> {
+    /// Return `Some(midi_message)` if `self` is not a SysEx message, or `None` if it is. This expands the lifetime of
+    /// the `MidiMessage` from `'a` to `'static`.
+    pub fn drop_sysex(self) -> Option<MidiMessage<[U7; 0]>> {
+        match self {
+            MidiMessage::NoteOff(a, b, c) => Some(MidiMessage::NoteOff(a, b, c)),
+            MidiMessage::NoteOn(a, b, c) => Some(MidiMessage::NoteOn(a, b, c)),
+            MidiMessage::PolyphonicKeyPressure(a, b, c) => {
+                Some(MidiMessage::PolyphonicKeyPressure(a, b, c))
+            }
+            MidiMessage::ControlChange(a, b, c) => Some(MidiMessage::ControlChange(a, b, c)),
+            MidiMessage::ProgramChange(a, b) => Some(MidiMessage::ProgramChange(a, b)),
+            MidiMessage::ChannelPressure(a, b) => Some(MidiMessage::ChannelPressure(a, b)),
+            MidiMessage::PitchBendChange(a, b) => Some(MidiMessage::PitchBendChange(a, b)),
+            MidiMessage::SysEx(_) => None,
+            MidiMessage::MidiTimeCode(a) => Some(MidiMessage::MidiTimeCode(a)),
+            MidiMessage::SongPositionPointer(a) => Some(MidiMessage::SongPositionPointer(a)),
+            MidiMessage::SongSelect(a) => Some(MidiMessage::SongSelect(a)),
+            MidiMessage::Reserved(a) => Some(MidiMessage::Reserved(a)),
+            MidiMessage::TuneRequest => Some(MidiMessage::TuneRequest),
+            MidiMessage::TimingClock => Some(MidiMessage::TimingClock),
+            MidiMessage::Start => Some(MidiMessage::Start),
+            MidiMessage::Continue => Some(MidiMessage::Continue),
+            MidiMessage::Stop => Some(MidiMessage::Stop),
+            MidiMessage::ActiveSensing => Some(MidiMessage::ActiveSensing),
+            MidiMessage::Reset => Some(MidiMessage::Reset),
+        }
     }
 
+    /// The channel associated with the MIDI message, if applicable for the message type.
+    pub fn channel(&self) -> Option<Channel> {
+        match self {
+            MidiMessage::NoteOff(c, ..) => Some(*c),
+            MidiMessage::NoteOn(c, ..) => Some(*c),
+            MidiMessage::PolyphonicKeyPressure(c, ..) => Some(*c),
+            MidiMessage::ControlChange(c, ..) => Some(*c),
+            MidiMessage::ProgramChange(c, ..) => Some(*c),
+            MidiMessage::ChannelPressure(c, ..) => Some(*c),
+            MidiMessage::PitchBendChange(c, ..) => Some(*c),
+            _ => None,
+        }
+    }
+}
+
+pub trait DataSlice {
+    fn as_data_slice(&self) -> &[U7];
+}
+
+impl<D: AsRef<[U7]>> DataSlice for D {
+    fn as_data_slice(&self) -> &[U7] {
+        self.as_ref()
+    }
+}
+
+impl<D: DataSlice> MidiMessage<D> {
     /// Copies the message as bytes to slice. If slice does not have enough capacity to fit the
     /// message, then an error is returned. On success, the number of bytes written will be
     /// returned. This should be the same number obtained from `self.bytes_size()`.
@@ -192,14 +244,9 @@ impl<'a> MidiMessage<'a> {
                 }
                 MidiMessage::SysEx(b) => {
                     slice[0] = 0xF0;
-                    slice[1..1 + b.len()].copy_from_slice(U7::data_to_bytes(b));
-                    slice[1 + b.len()] = 0xF7;
-                }
-                #[cfg(feature = "std")]
-                MidiMessage::OwnedSysEx(ref b) => {
-                    slice[0] = 0xF0;
-                    slice[1..1 + b.len()].copy_from_slice(U7::data_to_bytes(b));
-                    slice[1 + b.len()] = 0xF7;
+                    slice[1..1 + b.as_data_slice().len()]
+                        .copy_from_slice(U7::data_to_bytes(b.as_data_slice()));
+                    slice[1 + b.as_data_slice().len()] = 0xF7;
                 }
                 MidiMessage::MidiTimeCode(a) => slice.copy_from_slice(&[0xF1, u8::from(*a)]),
                 MidiMessage::SongPositionPointer(a) => {
@@ -220,70 +267,6 @@ impl<'a> MidiMessage<'a> {
         }
     }
 
-    /// Return `Some(midi_message)` if `self` is not a SysEx message, or `None` if it is. This expands the lifetime of
-    /// the `MidiMessage` from `'a` to `'static`.
-    pub fn drop_unowned_sysex(self) -> Option<MidiMessage<'static>> {
-        match self {
-            MidiMessage::NoteOff(a, b, c) => Some(MidiMessage::NoteOff(a, b, c)),
-            MidiMessage::NoteOn(a, b, c) => Some(MidiMessage::NoteOn(a, b, c)),
-            MidiMessage::PolyphonicKeyPressure(a, b, c) => {
-                Some(MidiMessage::PolyphonicKeyPressure(a, b, c))
-            }
-            MidiMessage::ControlChange(a, b, c) => Some(MidiMessage::ControlChange(a, b, c)),
-            MidiMessage::ProgramChange(a, b) => Some(MidiMessage::ProgramChange(a, b)),
-            MidiMessage::ChannelPressure(a, b) => Some(MidiMessage::ChannelPressure(a, b)),
-            MidiMessage::PitchBendChange(a, b) => Some(MidiMessage::PitchBendChange(a, b)),
-            MidiMessage::SysEx(_) => None,
-            #[cfg(feature = "std")]
-            MidiMessage::OwnedSysEx(bytes) => Some(MidiMessage::OwnedSysEx(bytes)),
-            MidiMessage::MidiTimeCode(a) => Some(MidiMessage::MidiTimeCode(a)),
-            MidiMessage::SongPositionPointer(a) => Some(MidiMessage::SongPositionPointer(a)),
-            MidiMessage::SongSelect(a) => Some(MidiMessage::SongSelect(a)),
-            MidiMessage::Reserved(a) => Some(MidiMessage::Reserved(a)),
-            MidiMessage::TuneRequest => Some(MidiMessage::TuneRequest),
-            MidiMessage::TimingClock => Some(MidiMessage::TimingClock),
-            MidiMessage::Start => Some(MidiMessage::Start),
-            MidiMessage::Continue => Some(MidiMessage::Continue),
-            MidiMessage::Stop => Some(MidiMessage::Stop),
-            MidiMessage::ActiveSensing => Some(MidiMessage::ActiveSensing),
-            MidiMessage::Reset => Some(MidiMessage::Reset),
-        }
-    }
-
-    /// Take ownership of the SysEx data. This expands the lifetime of the message to `'static`. If `'static` lifetime
-    /// is needed but SysEx messages can be dropped, consider using `self.drop_unowned_sysex()`.
-    #[inline(always)]
-    pub fn to_owned(&self) -> MidiMessage<'static> {
-        match self.clone() {
-            MidiMessage::NoteOff(a, b, c) => MidiMessage::NoteOff(a, b, c),
-            MidiMessage::NoteOn(a, b, c) => MidiMessage::NoteOn(a, b, c),
-            MidiMessage::PolyphonicKeyPressure(a, b, c) => {
-                MidiMessage::PolyphonicKeyPressure(a, b, c)
-            }
-            MidiMessage::ControlChange(a, b, c) => MidiMessage::ControlChange(a, b, c),
-            MidiMessage::ProgramChange(a, b) => MidiMessage::ProgramChange(a, b),
-            MidiMessage::ChannelPressure(a, b) => MidiMessage::ChannelPressure(a, b),
-            MidiMessage::PitchBendChange(a, b) => MidiMessage::PitchBendChange(a, b),
-            #[cfg(feature = "std")]
-            MidiMessage::SysEx(bytes) => MidiMessage::OwnedSysEx(bytes.to_vec()),
-            #[cfg(not(feature = "std"))]
-            MidiMessage::SysEx(_) => MidiMessage::SysEx(&[]), //to be updated with a better solution.
-            #[cfg(feature = "std")]
-            MidiMessage::OwnedSysEx(bytes) => MidiMessage::OwnedSysEx(bytes),
-            MidiMessage::MidiTimeCode(a) => MidiMessage::MidiTimeCode(a),
-            MidiMessage::SongPositionPointer(a) => MidiMessage::SongPositionPointer(a),
-            MidiMessage::SongSelect(a) => MidiMessage::SongSelect(a),
-            MidiMessage::Reserved(a) => MidiMessage::Reserved(a),
-            MidiMessage::TuneRequest => MidiMessage::TuneRequest,
-            MidiMessage::TimingClock => MidiMessage::TimingClock,
-            MidiMessage::Start => MidiMessage::Start,
-            MidiMessage::Continue => MidiMessage::Continue,
-            MidiMessage::Stop => MidiMessage::Stop,
-            MidiMessage::ActiveSensing => MidiMessage::ActiveSensing,
-            MidiMessage::Reset => MidiMessage::Reset,
-        }
-    }
-
     /// The number of bytes the MIDI message takes when converted to bytes.
     pub fn bytes_size(&self) -> usize {
         match self {
@@ -294,9 +277,7 @@ impl<'a> MidiMessage<'a> {
             MidiMessage::ProgramChange(..) => 2,
             MidiMessage::ChannelPressure(..) => 2,
             MidiMessage::PitchBendChange(..) => 3,
-            MidiMessage::SysEx(b) => 2 + b.len(),
-            #[cfg(feature = "std")]
-            MidiMessage::OwnedSysEx(b) => 2 + b.len(),
+            MidiMessage::SysEx(b) => 2 + b.as_data_slice().len(),
             MidiMessage::MidiTimeCode(_) => 2,
             MidiMessage::SongPositionPointer(_) => 3,
             MidiMessage::SongSelect(_) => 2,
@@ -308,57 +289,6 @@ impl<'a> MidiMessage<'a> {
             MidiMessage::Stop => 1,
             MidiMessage::ActiveSensing => 1,
             MidiMessage::Reset => 1,
-        }
-    }
-
-    /// The number of bytes the MIDI message takes when encoded with the `std::io::Read` trait.
-    #[deprecated(
-        since = "3.1.0",
-        note = "Function has been renamed to MidiMessage::bytes_size()."
-    )]
-    pub fn wire_size(&self) -> usize {
-        self.bytes_size()
-    }
-
-    /// The channel associated with the MIDI message, if applicable for the message type.
-    pub fn channel(&self) -> Option<Channel> {
-        match self {
-            MidiMessage::NoteOff(c, ..) => Some(*c),
-            MidiMessage::NoteOn(c, ..) => Some(*c),
-            MidiMessage::PolyphonicKeyPressure(c, ..) => Some(*c),
-            MidiMessage::ControlChange(c, ..) => Some(*c),
-            MidiMessage::ProgramChange(c, ..) => Some(*c),
-            MidiMessage::ChannelPressure(c, ..) => Some(*c),
-            MidiMessage::PitchBendChange(c, ..) => Some(*c),
-            _ => None,
-        }
-    }
-
-    #[inline(always)]
-    fn new_sysex(bytes: &'a [u8]) -> Result<Self, Error> {
-        debug_assert!(bytes[0] == 0xF0);
-        let end_i = 1 + bytes[1..]
-            .iter()
-            .copied()
-            .position(is_status_byte)
-            .ok_or(Error::NoSysExEndByte)?;
-        if bytes[end_i] != 0xF7 {
-            return Err(Error::UnexpectedNonSysExEndByte(bytes[end_i]));
-        }
-        // We've already gone through the bytes to find the first non data byte so we are assured
-        // that values from 1..end_i are valid data bytes.
-        let data_bytes = unsafe { U7::from_bytes_unchecked(&bytes[1..end_i]) };
-        Ok(MidiMessage::SysEx(data_bytes))
-    }
-}
-
-#[cfg(feature = "std")]
-#[deprecated(since = "3.1.0", note = "Use MidiMessage::copy_from_slice instead.")]
-impl<'a> io::Read for MidiMessage<'a> {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self.copy_to_slice(buf) {
-            Ok(n) => Ok(n),
-            Err(ToSliceError::BufferTooSmall) => Ok(0),
         }
     }
 }
@@ -560,13 +490,12 @@ mod test {
     fn copy_to_slice() {
         let b = {
             let mut b = [0u8; 6];
-            let bytes_copied = MidiMessage::PolyphonicKeyPressure(
+            let message: MidiMessage<[U7; 0]> = MidiMessage::PolyphonicKeyPressure(
                 Channel::Ch10,
                 Note::A5,
                 U7::try_from(43).unwrap(),
-            )
-            .copy_to_slice(&mut b)
-            .unwrap();
+            );
+            let bytes_copied = message.copy_to_slice(&mut b).unwrap();
             assert_eq!(bytes_copied, 3);
             b
         };
@@ -582,56 +511,18 @@ mod test {
                     .copy_to_slice(&mut b)
                     .unwrap();
             assert_eq!(bytes_copied, 7);
+            MidiMessage::SysEx([U7::MIN, U7::MAX])
+                .copy_to_slice(&mut b)
+                .unwrap();
             b
         };
         assert_eq!(b, [0xF0, 10, 20, 30, 40, 50, 0xF7, 0]);
     }
 
     #[test]
-    fn drop_unowned_sysex() {
-        assert_eq!(
-            MidiMessage::SysEx(U7::try_from_bytes(&[1, 2, 3]).unwrap()).drop_unowned_sysex(),
-            None
-        );
-        assert_eq!(
-            MidiMessage::OwnedSysEx(vec![
-                U7::try_from(1).unwrap(),
-                U7::try_from(2).unwrap(),
-                U7::try_from(3).unwrap()
-            ])
-            .drop_unowned_sysex(),
-            Some(MidiMessage::OwnedSysEx(vec![
-                U7::try_from(1).unwrap(),
-                U7::try_from(2).unwrap(),
-                U7::try_from(3).unwrap()
-            ]))
-        );
-        assert_eq!(
-            MidiMessage::TuneRequest.drop_unowned_sysex(),
-            Some(MidiMessage::TuneRequest)
-        );
-    }
-
-    #[test]
-    fn to_owned() {
-        assert_eq!(
-            MidiMessage::SysEx(U7::try_from_bytes(&[1, 2, 3]).unwrap()).to_owned(),
-            MidiMessage::OwnedSysEx(vec![
-                U7::try_from(1).unwrap(),
-                U7::try_from(2).unwrap(),
-                U7::try_from(3).unwrap()
-            ])
-        );
-        assert_ne!(
-            MidiMessage::SysEx(U7::try_from_bytes(&[1, 2, 3]).unwrap()).to_owned(),
-            MidiMessage::SysEx(U7::try_from_bytes(&[1, 2, 3]).unwrap())
-        );
-    }
-
-    #[test]
     fn channel() {
         assert_eq!(
-            MidiMessage::ControlChange(
+            MidiMessage::<[U7; 0]>::ControlChange(
                 Channel::Ch8,
                 U7::try_from(7).unwrap(),
                 U7::try_from(55).unwrap()
@@ -639,6 +530,6 @@ mod test {
             .channel(),
             Some(Channel::Ch8)
         );
-        assert_eq!(MidiMessage::Start.channel(), None);
+        assert_eq!(MidiMessage::<[U7; 0]>::Start.channel(), None);
     }
 }

@@ -4,7 +4,7 @@ extern crate criterion;
 use criterion::{black_box, Criterion};
 use std::convert::TryFrom;
 
-const MESSAGES: [wmidi::MidiMessage<'static>; 19] = [
+const MESSAGES: [wmidi::MidiMessage<&'static [wmidi::U7]>; 19] = [
     wmidi::MidiMessage::NoteOn(wmidi::Channel::Ch1, wmidi::Note::C3, wmidi::U7::MAX),
     wmidi::MidiMessage::NoteOff(wmidi::Channel::Ch2, wmidi::Note::A3, wmidi::U7::MIN),
     wmidi::MidiMessage::PolyphonicKeyPressure(wmidi::Channel::Ch3, wmidi::Note::B1, wmidi::U7::MAX),
@@ -28,7 +28,7 @@ const MESSAGES: [wmidi::MidiMessage<'static>; 19] = [
 
 fn bench_to_slice(c: &mut Criterion) {
     c.bench_function("MidiMessage::copy_to_slice", |b| {
-        let message = black_box(wmidi::MidiMessage::NoteOn(
+        let message = black_box(wmidi::MidiMessage::<&'static [wmidi::U7]>::NoteOn(
             wmidi::Channel::Ch1,
             wmidi::Note::C3,
             wmidi::U7::MAX,
@@ -79,7 +79,7 @@ fn bench_from_bytes(c: &mut Criterion) {
     c.bench_function("MidiMessage::try_from<u8> many", |b| {
         let bytes = black_box(bytes.clone());
         b.iter(|| {
-            let mut messages: Vec<wmidi::MidiMessage> = Vec::with_capacity(MESSAGES.len());
+            let mut messages: Vec<_> = Vec::with_capacity(MESSAGES.len());
             let mut start = 0;
             while start < bytes.len() {
                 let message = wmidi::MidiMessage::try_from(&bytes[start..]).unwrap();
