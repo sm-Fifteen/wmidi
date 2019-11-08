@@ -158,28 +158,35 @@ fn new_sysex(bytes: &[u8]) -> Result<MidiMessage<&[U7]>, Error> {
 impl<D> MidiMessage<D> {
     /// Return `Some(midi_message)` if `self` is not a SysEx message, or `None` if it is.
     pub fn drop_sysex(self) -> Option<MidiMessage<[U7; 0]>> {
-        match self {
-            MidiMessage::NoteOff(a, b, c) => Some(MidiMessage::NoteOff(a, b, c)),
-            MidiMessage::NoteOn(a, b, c) => Some(MidiMessage::NoteOn(a, b, c)),
-            MidiMessage::PolyphonicKeyPressure(a, b, c) => {
-                Some(MidiMessage::PolyphonicKeyPressure(a, b, c))
-            }
-            MidiMessage::ControlChange(a, b, c) => Some(MidiMessage::ControlChange(a, b, c)),
-            MidiMessage::ProgramChange(a, b) => Some(MidiMessage::ProgramChange(a, b)),
-            MidiMessage::ChannelPressure(a, b) => Some(MidiMessage::ChannelPressure(a, b)),
-            MidiMessage::PitchBendChange(a, b) => Some(MidiMessage::PitchBendChange(a, b)),
+        match self.map_sysex(|_| []) {
             MidiMessage::SysEx(_) => None,
-            MidiMessage::MidiTimeCode(a) => Some(MidiMessage::MidiTimeCode(a)),
-            MidiMessage::SongPositionPointer(a) => Some(MidiMessage::SongPositionPointer(a)),
-            MidiMessage::SongSelect(a) => Some(MidiMessage::SongSelect(a)),
-            MidiMessage::Reserved(a) => Some(MidiMessage::Reserved(a)),
-            MidiMessage::TuneRequest => Some(MidiMessage::TuneRequest),
-            MidiMessage::TimingClock => Some(MidiMessage::TimingClock),
-            MidiMessage::Start => Some(MidiMessage::Start),
-            MidiMessage::Continue => Some(MidiMessage::Continue),
-            MidiMessage::Stop => Some(MidiMessage::Stop),
-            MidiMessage::ActiveSensing => Some(MidiMessage::ActiveSensing),
-            MidiMessage::Reset => Some(MidiMessage::Reset),
+            message => Some(message),
+        }
+    }
+
+    pub fn map_sysex<F: FnOnce(&D) -> T, T>(&self, f: F) -> MidiMessage<T> {
+        match self {
+            MidiMessage::NoteOff(a, b, c) => (MidiMessage::NoteOff(*a, *b, *c)),
+            MidiMessage::NoteOn(a, b, c) => (MidiMessage::NoteOn(*a, *b, *c)),
+            MidiMessage::PolyphonicKeyPressure(a, b, c) => {
+                (MidiMessage::PolyphonicKeyPressure(*a, *b, *c))
+            }
+            MidiMessage::ControlChange(a, b, c) => (MidiMessage::ControlChange(*a, *b, *c)),
+            MidiMessage::ProgramChange(a, b) => (MidiMessage::ProgramChange(*a, *b)),
+            MidiMessage::ChannelPressure(a, b) => (MidiMessage::ChannelPressure(*a, *b)),
+            MidiMessage::PitchBendChange(a, b) => (MidiMessage::PitchBendChange(*a, *b)),
+            MidiMessage::SysEx(ref b) => MidiMessage::SysEx(f(b)),
+            MidiMessage::MidiTimeCode(a) => (MidiMessage::MidiTimeCode(*a)),
+            MidiMessage::SongPositionPointer(a) => (MidiMessage::SongPositionPointer(*a)),
+            MidiMessage::SongSelect(a) => (MidiMessage::SongSelect(*a)),
+            MidiMessage::Reserved(a) => (MidiMessage::Reserved(*a)),
+            MidiMessage::TuneRequest => (MidiMessage::TuneRequest),
+            MidiMessage::TimingClock => (MidiMessage::TimingClock),
+            MidiMessage::Start => (MidiMessage::Start),
+            MidiMessage::Continue => (MidiMessage::Continue),
+            MidiMessage::Stop => (MidiMessage::Stop),
+            MidiMessage::ActiveSensing => (MidiMessage::ActiveSensing),
+            MidiMessage::Reset => (MidiMessage::Reset),
         }
     }
 
