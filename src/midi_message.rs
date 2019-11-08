@@ -199,17 +199,7 @@ impl<D> MidiMessage<D> {
     }
 }
 
-pub trait DataSlice {
-    fn as_data_slice(&self) -> &[U7];
-}
-
-impl<D: AsRef<[U7]>> DataSlice for D {
-    fn as_data_slice(&self) -> &[U7] {
-        self.as_ref()
-    }
-}
-
-impl<D: DataSlice> MidiMessage<D> {
+impl<D: AsRef<[U7]>> MidiMessage<D> {
     /// Copies the message as bytes to slice. If slice does not have enough capacity to fit the
     /// message, then an error is returned. On success, the number of bytes written will be
     /// returned. This should be the same number obtained from `self.bytes_size()`.
@@ -244,9 +234,8 @@ impl<D: DataSlice> MidiMessage<D> {
                 }
                 MidiMessage::SysEx(b) => {
                     slice[0] = 0xF0;
-                    slice[1..1 + b.as_data_slice().len()]
-                        .copy_from_slice(U7::data_to_bytes(b.as_data_slice()));
-                    slice[1 + b.as_data_slice().len()] = 0xF7;
+                    slice[1..1 + b.as_ref().len()].copy_from_slice(U7::data_to_bytes(b.as_ref()));
+                    slice[1 + b.as_ref().len()] = 0xF7;
                 }
                 MidiMessage::MidiTimeCode(a) => slice.copy_from_slice(&[0xF1, u8::from(*a)]),
                 MidiMessage::SongPositionPointer(a) => {
@@ -277,7 +266,7 @@ impl<D: DataSlice> MidiMessage<D> {
             MidiMessage::ProgramChange(..) => 2,
             MidiMessage::ChannelPressure(..) => 2,
             MidiMessage::PitchBendChange(..) => 3,
-            MidiMessage::SysEx(b) => 2 + b.as_data_slice().len(),
+            MidiMessage::SysEx(b) => 2 + b.as_ref().len(),
             MidiMessage::MidiTimeCode(_) => 2,
             MidiMessage::SongPositionPointer(_) => 3,
             MidiMessage::SongSelect(_) => 2,
@@ -511,9 +500,6 @@ mod test {
                     .copy_to_slice(&mut b)
                     .unwrap();
             assert_eq!(bytes_copied, 7);
-            MidiMessage::SysEx([U7::MIN, U7::MAX])
-                .copy_to_slice(&mut b)
-                .unwrap();
             b
         };
         assert_eq!(b, [0xF0, 10, 20, 30, 40, 50, 0xF7, 0]);
