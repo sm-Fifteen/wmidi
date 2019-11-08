@@ -139,7 +139,7 @@ impl<'a> TryFrom<&'a [u8]> for MidiMessage<&'a [U7]> {
 }
 
 #[inline(always)]
-fn new_sysex<'a>(bytes: &'a [u8]) -> Result<MidiMessage<&'a [U7]>, Error> {
+fn new_sysex(bytes: &[u8]) -> Result<MidiMessage<&[U7]>, Error> {
     debug_assert!(bytes[0] == 0xF0);
     let end_i = 1 + bytes[1..]
         .iter()
