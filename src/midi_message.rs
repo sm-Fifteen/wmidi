@@ -156,8 +156,7 @@ fn new_sysex(bytes: &[u8]) -> Result<MidiMessage<&[U7]>, Error> {
 }
 
 impl<D> MidiMessage<D> {
-    /// Return `Some(midi_message)` if `self` is not a SysEx message, or `None` if it is. This expands the lifetime of
-    /// the `MidiMessage` from `'a` to `'static`.
+    /// Return `Some(midi_message)` if `self` is not a SysEx message, or `None` if it is.
     pub fn drop_sysex(self) -> Option<MidiMessage<[U7; 0]>> {
         match self {
             MidiMessage::NoteOff(a, b, c) => Some(MidiMessage::NoteOff(a, b, c)),
