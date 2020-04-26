@@ -1,15 +1,17 @@
 use crate::byte::U7;
 
-#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+/// A control function.
+#[repr(u8)]
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq, PartialOrd, Ord)]
 pub enum ControlFunction {
-    /// Continuous Controller Data (MSB)
+    /// Continuous Controller Data (MSB).
     BankSelect = 0,
     ModulationWheel = 1,
     BreathController = 2,
     Undefined3 = 3,
     FootController = 4,
     PortamentoTime = 5,
-    /// Data entry is 6, 38, 96, 97, 98, 99, 100 and 101
+    /// Data entry is 6, 38, 96, 97, 98, 99, 100 and 101.
     DataEntryMSB = 6,
     ChannelVolume = 7,
     Balance = 8,
@@ -36,7 +38,7 @@ pub enum ControlFunction {
     Undefined29 = 29,
     Undefined30 = 30,
     Undefined31 = 31,
-    /// Continuous Controller Data (LSB)
+    /// Continuous Controller Data (LSB).
     BankSelectLSB = 32,
     ModulationWheelLSB = 33,
     BreathControllerLSB = 34,
@@ -70,23 +72,30 @@ pub enum ControlFunction {
     Undefined30LSB = 62,
     Undefined31LSB = 63,
 
-    // Additional single-byte controllers
-    DamperPedal = 64, // sustain
+    /// Sustain.
+    DamperPedal = 64,
     PortamentoOnOff = 65,
     Sostenuto = 66,
     SoftPedal = 67,
-    LegatoFootswitch = 68,  // vv = 00-3F:Normal, 40-7F=Legatto
-    Hold2 = 69,             // Hold1 would be 64
-    SoundController1 = 70,  // default: Sound Variation
-    SoundController2 = 71,  // default: Timbre/Harmonic Intensity
-    SoundController3 = 72,  // default: Release Time
-    SoundController4 = 73,  // default: Attack Time
-    SoundController5 = 74,  // default: Brightness
-    SoundController6 = 75,  // no default
-    SoundController7 = 76,  // no default
-    SoundController8 = 77,  // no default
-    SoundController9 = 78,  // no default
-    SoundController10 = 79, // no default
+    /// vv = 00-3F:Normal, 40-7F=Legatto.
+    LegatoFootswitch = 68,
+    /// Hold1 would be 64.
+    Hold2 = 69,
+    /// default: Sound Variation.
+    SoundController1 = 70,
+    /// default: Timbre/Harmonic Intensity.
+    SoundController2 = 71,
+    /// default: Release Time.
+    SoundController3 = 72,
+    /// default: Attack Time.
+    SoundController4 = 73,
+    /// default: Brightness.
+    SoundController5 = 74,
+    SoundController6 = 75,
+    SoundController7 = 76,
+    SoundController8 = 77,
+    SoundController9 = 78,
+    SoundController10 = 79,
     GeneralPurposeController5 = 80,
     GeneralPurposeController6 = 81,
     GeneralPurposeController7 = 82,
@@ -98,21 +107,26 @@ pub enum ControlFunction {
     Undefined88 = 88,
     Undefined89 = 89,
     Undefined90 = 90,
-    Effects1Depth = 91, // formerly External Effects Depth
-    Effects2Depth = 92, // formerly Tremolo Depth
-    Effects3Depth = 93, // formerly Chorus Depth
-    Effects4Depth = 94, // formerly Celeste (Detune) Depth
-    Effects5Depth = 95, // formerly Phaser Depth
+    /// formerly External Effects Depth.
+    Effects1Depth = 91,
+    /// formerly Tremolo Depth.
+    Effects2Depth = 92,
+    /// formerly Chorus Depth.
+    Effects3Depth = 93,
+    /// formerly Celeste (Detune) Depth.
+    Effects4Depth = 94,
+    /// formerly Phaser Depth.
+    Effects5Depth = 95,
 
-    // Increment/Decrement and Parameter numbers
-    DataIncrement = 96,                   // See Data Entry (6 & 38)
-    DataDecrement = 97,                   // See Data Entry (6 & 38)
-    NonRegisteredParameterNumberLSB = 98, // See Data Entry (6 & 38)
-    NonRegisteredParameterNumberMSB = 99, // See Data Entry (6 & 38)
-    RegisteredParameterNumberLSB = 100,   // See Data Entry (6 & 38)
-    RegisteredParameterNumberMSB = 101,   // See Data Entry (6 & 38)
+    /// Increment/Decrement and Parameter numbers.
+    DataIncrement = 96,
+    /// Increment/Decrement and Parameter numbers.
+    DataDecrement = 97,
+    NonRegisteredParameterNumberLSB = 98,
+    NonRegisteredParameterNumberMSB = 99,
+    RegisteredParameterNumberLSB = 100,
+    RegisteredParameterNumberMSB = 101,
 
-    // Undefined single-byte controllers
     Undefined102 = 102,
     Undefined103 = 103,
     Undefined104 = 104,
@@ -132,21 +146,21 @@ pub enum ControlFunction {
     Undefined118 = 118,
     Undefined119 = 119,
 
-    /// CHANNEL MODE MESSAGES
-    /// Channel must always be the instrument's Basic channel
-    /// Affect the entire instrument
-    AllSoundOff = 120, // Mute all sound playing (and maybe lights)
+    /// Mute all sound playing (and maybe lights).
+    AllSoundOff = 120,
     ResetAllControllers = 121,
-    LocalControl = 122, // Whether the instrument should react to its own input (0 = off, 127 = on)
-    AllNotesOff = 123, // Mute all notes from MIDI-in (not Local Control), notes will keep playing if DamperPedal is on
-    /// All the following also double as AllNotesOff
-    /// Recognize sound from all channels
+    /// Whether the instrument should react to its own input (0 = off, 127 = on).
+    LocalControl = 122,
+    /// Mute all notes from MIDI-in (not Local Control), notes will keep playing if DamperPedal is
+    /// on.
+    AllNotesOff = 123,
+    /// Recognize sound from all channels.
     OmniModeOn = 124,
-    /// Only recognize sound from basic channel
+    /// Only recognize sound from basic channel.
     OmniModeOff = 125,
-    /// (Poly off) One note per channel (val is how many channels to use, 0 means auto)
+    /// (Poly off) One note per channel (val is how many channels to use, 0 means auto).
     MonoOperation = 126,
-    /// (Mono off) One note per key per channel
+    /// (Mono off) One note per key per channel.
     PolyOperation = 127,
 }
 
@@ -166,5 +180,21 @@ impl From<ControlFunction> for U7 {
 impl From<ControlFunction> for u8 {
     fn from(control_function: ControlFunction) -> u8 {
         control_function as u8
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::U7;
+    use std::convert::TryFrom;
+
+    #[test]
+    fn from_u7() {
+        for value in 0..128 {
+            let data = U7::try_from(value).unwrap();
+            let cc = ControlFunction::from(data);
+            assert_eq!(value, cc.into());
+        }
     }
 }
